@@ -1,12 +1,15 @@
 // Copyright Contributors to the Open Cluster Management project
 package certchains
 
-import "github.com/openshift/library-go/pkg/crypto"
+import (
+	"github.com/openshift/library-go/pkg/crypto"
+	"time"
+)
 
 func NewCAInfo() *CAInfo {
 	return &CAInfo{
 		signerName:   "",
-		validityDays: 0,
+		validityDays: 365 * 24 * time.Hour, // default to 1 year
 		certFile:     "",
 		keyFile:      "",
 		serialFile:   "",
@@ -15,7 +18,7 @@ func NewCAInfo() *CAInfo {
 
 type CAInfo struct {
 	signerName   string
-	validityDays int
+	validityDays time.Duration
 	certFile     string
 	keyFile      string
 	serialFile   string
@@ -25,7 +28,7 @@ func (i *CAInfo) SetSignerName(name string) *CAInfo {
 	i.signerName = name
 	return i
 }
-func (i *CAInfo) SetValidityDays(duration int) *CAInfo {
+func (i *CAInfo) SetValidityDays(duration time.Duration) *CAInfo {
 	i.validityDays = duration
 	return i
 }

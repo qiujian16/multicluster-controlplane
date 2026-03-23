@@ -48,10 +48,10 @@ func certSetup(cfg *configs.ControlplaneRunConfig) (*certchains.CertificateChain
 	CASigner := certchains.NewCertificateSigner(
 		RootCACertDirName,
 		RootCACertDir(certificateDirectory),
-		LongLivedCertificateValidityDays,
+		time.Duration(LongLivedCertificateValidityDays)*24*time.Hour,
 	)
 
-	cai := certchains.NewCAInfo()
+	cai := certchains.NewCAInfo().SetValidityDays(time.Duration(LongLivedCertificateValidityDays) * 24 * time.Hour)
 	if cfg.IsCAProvided() {
 		cai.SetCertFile(cfg.Apiserver.CAFile).SetKeyFile(cfg.Apiserver.CAKeyFile)
 	} else {
@@ -69,7 +69,7 @@ func certSetup(cfg *configs.ControlplaneRunConfig) (*certchains.CertificateChain
 	serverSigner = certchains.NewCertificateSigner(
 		ServerCACertDirName,
 		ServerCACertDir(certificateDirectory),
-		ShortLivedCertificateValidityDays,
+		time.Duration(ShortLivedCertificateValidityDays)*24*time.Hour,
 	).WithServingCertificates(
 		&certchains.ServingCertificateSigningRequestInfo{
 			CSRMeta: certchains.CSRMeta{
@@ -105,7 +105,7 @@ func certSetup(cfg *configs.ControlplaneRunConfig) (*certchains.CertificateChain
 	requestheaderSigner = certchains.NewCertificateSigner(
 		RequestHeaderCACertDirName,
 		RequestHeaderCACertDir(certificateDirectory),
-		ShortLivedCertificateValidityDays,
+		time.Duration(ShortLivedCertificateValidityDays)*24*time.Hour,
 	).WithClientCertificates(
 		&certchains.ClientCertificateSigningRequestInfo{
 			CSRMeta: certchains.CSRMeta{
@@ -122,7 +122,7 @@ func certSetup(cfg *configs.ControlplaneRunConfig) (*certchains.CertificateChain
 	clientSigner = certchains.NewCertificateSigner(
 		ClientCACertDirName,
 		ClientCACertDir(certificateDirectory),
-		ShortLivedCertificateValidityDays,
+		time.Duration(ShortLivedCertificateValidityDays)*24*time.Hour,
 	).WithClientCertificates(
 		&certchains.ClientCertificateSigningRequestInfo{
 			CSRMeta: certchains.CSRMeta{
@@ -165,7 +165,7 @@ func certSetup(cfg *configs.ControlplaneRunConfig) (*certchains.CertificateChain
 		etcdSigner = certchains.NewCertificateSigner(
 			EtcdCACertDirName,
 			EtcdCACertDir(certificateDirectory),
-			ShortLivedCertificateValidityDays,
+			time.Duration(ShortLivedCertificateValidityDays)*24*time.Hour,
 		).WithClientCertificates(
 			&certchains.ClientCertificateSigningRequestInfo{
 				CSRMeta: certchains.CSRMeta{

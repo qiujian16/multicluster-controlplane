@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -55,8 +56,12 @@ func (p *Plugin) Admit(ctx context.Context, a admission.Attributes, o admission.
 		VersionedKind:      a.GetKind(),
 	}
 
-	gvr := clusterv1api.GroupVersion.WithResource("managedclusters")
-	gvk := clusterv1api.GroupVersion.WithKind("ManagedCluster")
+	gvr := clusterv1api.Resource("managedclusters").WithVersion("v1")
+	gvk := schema.GroupVersionKind{
+		Group:   gvr.Group,
+		Version: gvr.Version,
+		Kind:    "ManagedCluster",
+	}
 
 	// resource is not mcl
 	if a.GetKind() != gvk {

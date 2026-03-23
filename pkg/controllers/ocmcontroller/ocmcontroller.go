@@ -196,6 +196,7 @@ func runControllers(ctx context.Context,
 				addOnInformers,
 				workInformers,
 				dynamicInformers,
+				kubeInformers,
 			); err != nil {
 				klog.Fatal(err)
 			}

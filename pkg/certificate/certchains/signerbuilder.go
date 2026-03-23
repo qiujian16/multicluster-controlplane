@@ -3,6 +3,7 @@ package certchains
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/openshift/library-go/pkg/crypto"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -30,7 +31,7 @@ type CertificateSignerBuilder interface {
 type certificateSigner struct {
 	signerName         string
 	signerDir          string
-	signerValidityDays int
+	signerValidityDays time.Duration
 
 	// signerConfig should only be used in case this is a sub-ca signer
 	// It should be populated during CertificateSigner.SignSubCA()
@@ -46,7 +47,7 @@ type certificateSigner struct {
 }
 
 // NewCertificateSigner returns a builder object for a certificate chain for the given signer
-func NewCertificateSigner(signerName, signerDir string, validityDays int) CertificateSignerBuilder {
+func NewCertificateSigner(signerName, signerDir string, validityDays time.Duration) CertificateSignerBuilder {
 	return &certificateSigner{
 		signerName:         signerName,
 		signerDir:          signerDir,
@@ -56,7 +57,7 @@ func NewCertificateSigner(signerName, signerDir string, validityDays int) Certif
 
 func (s *certificateSigner) Name() string      { return s.signerName }
 func (s *certificateSigner) Directory() string { return s.signerDir }
-func (s *certificateSigner) ValidityDays() int { return s.signerValidityDays }
+func (s *certificateSigner) ValidityDays() int { return int(s.signerValidityDays / (24 * time.Hour)) }
 
 // WithSignerConfig uses the provided configuration in `config` to sign its
 // direct certificates.

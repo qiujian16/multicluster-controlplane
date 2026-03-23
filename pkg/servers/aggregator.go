@@ -32,6 +32,7 @@ import (
 	apiregistrationclient "k8s.io/kube-aggregator/pkg/client/clientset_generated/clientset/typed/apiregistration/v1"
 	informers "k8s.io/kube-aggregator/pkg/client/informers/externalversions/apiregistration/v1"
 	"k8s.io/kube-aggregator/pkg/controllers/autoregister"
+	controlplaneapiserver "k8s.io/kubernetes/pkg/controlplane/apiserver"
 	"k8s.io/kubernetes/pkg/controlplane/controller/crdregistration"
 
 	"open-cluster-management.io/multicluster-controlplane/pkg/controllers/kubecontroller"
@@ -162,7 +163,7 @@ func createAggregatorServer(aggregatorConfig *aggregatorapiserver.Config, delega
 	return aggregatorServer, nil
 }
 
-func makeAPIService(gv schema.GroupVersion) *v1.APIService {
+func makeAPIService(gv schema.GroupVersion, apiVersionPriorities map[schema.GroupVersion]controlplaneapiserver.APIServicePriority) *v1.APIService {
 	apiServicePriority, ok := apiVersionPriorities[gv]
 	if !ok {
 		// if we aren't found, then we shouldn't register ourselves because it could result in a CRD group version
@@ -175,8 +176,8 @@ func makeAPIService(gv schema.GroupVersion) *v1.APIService {
 		Spec: v1.APIServiceSpec{
 			Group:                gv.Group,
 			Version:              gv.Version,
-			GroupPriorityMinimum: apiServicePriority.group,
-			VersionPriority:      apiServicePriority.version,
+			GroupPriorityMinimum: apiServicePriority.Group,
+			VersionPriority:      apiServicePriority.Version,
 		},
 	}
 }
@@ -222,48 +223,14 @@ func makeAPIServiceAvailableHealthCheck(name string, apiServices []*v1.APIServic
 	})
 }
 
-// priority defines group priority that is used in discovery. This controls
-// group position in the kubectl output.
-type priority struct {
-	// group indicates the order of the group relative to other groups.
-	group int32
-	// version indicates the relative order of the version inside of its group.
-	version int32
-}
-
-// The proper way to resolve this letting the aggregator know the desired group and version-within-group order of the underlying servers
-// is to refactor the genericapiserver.DelegationTarget to include a list of priorities based on which APIs were installed.
-// This requires the APIGroupInfo struct to evolve and include the concept of priorities and to avoid mistakes, the core storage map there needs to be updated.
-// That ripples out every bit as far as you'd expect, so for 1.7 we'll include the list here instead of being built up during storage.
-var apiVersionPriorities = map[schema.GroupVersion]priority{
-	{Group: "", Version: "v1"}: {group: 18000, version: 1},
-	// to my knowledge, nothing below here collides
-	{Group: "events.k8s.io", Version: "v1"}:                      {group: 17750, version: 15},
-	{Group: "events.k8s.io", Version: "v1beta1"}:                 {group: 17750, version: 5},
-	{Group: "authentication.k8s.io", Version: "v1"}:              {group: 17700, version: 15},
-	{Group: "authorization.k8s.io", Version: "v1"}:               {group: 17600, version: 15},
-	{Group: "certificates.k8s.io", Version: "v1"}:                {group: 17300, version: 15},
-	{Group: "rbac.authorization.k8s.io", Version: "v1"}:          {group: 17000, version: 15},
-	{Group: "apiextensions.k8s.io", Version: "v1"}:               {group: 16700, version: 15},
-	{Group: "admissionregistration.k8s.io", Version: "v1"}:       {group: 16700, version: 15},
-	{Group: "coordination.k8s.io", Version: "v1"}:                {group: 16500, version: 15},
-	{Group: "discovery.k8s.io", Version: "v1"}:                   {group: 16200, version: 15},
-	{Group: "discovery.k8s.io", Version: "v1beta1"}:              {group: 16200, version: 12},
-	{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta2"}:  {group: 16100, version: 15},
-	{Group: "flowcontrol.apiserver.k8s.io", Version: "v1beta1"}:  {group: 16100, version: 12},
-	{Group: "flowcontrol.apiserver.k8s.io", Version: "v1alpha1"}: {group: 16100, version: 9},
-	{Group: "internal.apiserver.k8s.io", Version: "v1alpha1"}:    {group: 16000, version: 9},
-	// Append a new group to the end of the list if unsure.
-	// You can use min(existing group)-100 as the initial value for a group.
-	// Version can be set to 9 (to have space around) for a new group.
-}
 
 func apiServicesToRegister(delegateAPIServer genericapiserver.DelegationTarget, registration autoregister.AutoAPIServiceRegistration) []*v1.APIService {
 	apiServices := []*v1.APIService{}
+	apiVersionPriorities := controlplaneapiserver.DefaultGenericAPIServicePriorities()
 
 	for _, curr := range delegateAPIServer.ListedPaths() {
 		if curr == "/api/v1" {
-			apiService := makeAPIService(schema.GroupVersion{Group: "", Version: "v1"})
+			apiService := makeAPIService(schema.GroupVersion{Group: "", Version: "v1"}, apiVersionPriorities)
 			registration.AddAPIServiceToSyncOnStart(apiService)
 			apiServices = append(apiServices, apiService)
 			continue
@@ -278,7 +245,7 @@ func apiServicesToRegister(delegateAPIServer genericapiserver.DelegationTarget, 
 			continue
 		}
 
-		apiService := makeAPIService(schema.GroupVersion{Group: tokens[2], Version: tokens[3]})
+		apiService := makeAPIService(schema.GroupVersion{Group: tokens[2], Version: tokens[3]}, apiVersionPriorities)
 		if apiService == nil {
 			continue
 		}

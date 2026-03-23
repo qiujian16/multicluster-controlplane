@@ -346,6 +346,8 @@ type serviceAccountTokenControllerStarter struct {
 }
 
 func (c serviceAccountTokenControllerStarter) startServiceAccountTokenController(ctx context.Context, controllerContext ControllerContext) (controller.Interface, bool, error) {
+	logger := klog.FromContext(ctx)
+
 	if !controllerContext.IsControllerEnabled(saTokenControllerName) {
 		klog.Warningf("%q is disabled", saTokenControllerName)
 		return nil, false, nil
@@ -374,6 +376,7 @@ func (c serviceAccountTokenControllerStarter) startServiceAccountTokenController
 		return nil, false, fmt.Errorf("failed to build token generator: %v", err)
 	}
 	controller, err := serviceaccountcontroller.NewTokensController(
+		logger,
 		controllerContext.InformerFactory.Core().V1().ServiceAccounts(),
 		controllerContext.InformerFactory.Core().V1().Secrets(),
 		c.rootClientBuilder.ClientOrDie("tokens-controller"),

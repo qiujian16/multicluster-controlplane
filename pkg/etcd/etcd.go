@@ -12,7 +12,7 @@ import (
 	"time"
 
 	"go.etcd.io/etcd/server/v3/embed"
-	"go.etcd.io/etcd/server/v3/wal"
+	"go.etcd.io/etcd/server/v3/storage/wal"
 
 	"k8s.io/klog/v2"
 )

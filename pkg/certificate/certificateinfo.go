@@ -41,7 +41,7 @@ const (
 	PeerCertDirName           = "peer"
 	ClientCertDirName         = "client"
 
-	// validity
+	// validity (in days)
 	LongLivedCertificateValidityDays  = 365 * 5
 	ShortLivedCertificateValidityDays = 365
 )

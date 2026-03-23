@@ -49,7 +49,6 @@ import (
 	"k8s.io/kubernetes/pkg/controlplane/apiserver/options"
 	"k8s.io/kubernetes/pkg/controlplane/reconcilers"
 	"k8s.io/kubernetes/pkg/kubeapiserver"
-	kubeauthenticator "k8s.io/kubernetes/pkg/kubeapiserver/authenticator"
 	kubeletclient "k8s.io/kubernetes/pkg/kubelet/client"
 	"k8s.io/kubernetes/pkg/serviceaccount"
 	netutils "k8s.io/utils/net"
@@ -353,7 +352,8 @@ func (s *ServerRunOptions) Complete(stopCh <-chan struct{}) error {
 	if s.ServiceAccountSigningKeyFile == "" {
 		// Default to the private server key for service account token signing
 		if len(s.Authentication.ServiceAccounts.KeyFiles) == 0 && s.SecureServing.ServerCert.CertKey.KeyFile != "" {
-			if kubeauthenticator.IsValidServiceAccountKeyFile(s.SecureServing.ServerCert.CertKey.KeyFile) {
+			// Validate the key file by attempting to load the public keys
+			if _, err := keyutil.PublicKeysFromFile(s.SecureServing.ServerCert.CertKey.KeyFile); err == nil {
 				s.Authentication.ServiceAccounts.KeyFiles = []string{
 					s.SecureServing.ServerCert.CertKey.KeyFile,
 				}

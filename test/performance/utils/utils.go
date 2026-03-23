@@ -30,7 +30,7 @@ var (
 )
 
 func init() {
-	utilruntime.Must(workv1.AddToScheme(genericScheme))
+	utilruntime.Must(workv1.Install(genericScheme))
 }
 
 func PrintMsg(msg string) {

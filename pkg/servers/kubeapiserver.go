@@ -4,26 +4,28 @@ package servers
 // refer to https://github.com/kubernetes/kubernetes/blob/{kubernetes-version}/cmd/kube-apiserver/app/server.go
 
 import (
-	"crypto/tls"
 	"fmt"
 	"net/http"
-	"net/url"
 	"time"
 
 	"k8s.io/apimachinery/pkg/util/wait"
 	cacheddiscovery "k8s.io/client-go/discovery/cached"
 	"k8s.io/client-go/restmapper"
 
-	appsv1 "k8s.io/api/apps/v1"
-	autoscalingapiv1 "k8s.io/api/autoscaling/v1"
-	autoscalingapiv2 "k8s.io/api/autoscaling/v2"
-	batchapiv1 "k8s.io/api/batch/v1"
+	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	authenticationv1 "k8s.io/api/authentication/v1"
+	authorizationapiv1 "k8s.io/api/authorization/v1"
+	certificatesapiv1 "k8s.io/api/certificates/v1"
+	coordinationapiv1 "k8s.io/api/coordination/v1"
+	apiv1 "k8s.io/api/core/v1"
+	discoveryv1 "k8s.io/api/discovery/v1"
+	eventsv1 "k8s.io/api/events/v1"
+	flowcontrolv1 "k8s.io/api/flowcontrol/v1"
 	networkingapiv1 "k8s.io/api/networking/v1"
-	nodev1 "k8s.io/api/node/v1"
-	policyapiv1 "k8s.io/api/policy/v1"
-	schedulingapiv1 "k8s.io/api/scheduling/v1"
+	rbacv1 "k8s.io/api/rbac/v1"
+	resourcev1 "k8s.io/api/resource/v1"
+	storageapiv1 "k8s.io/api/storage/v1"
 	extensionsapiserver "k8s.io/apiextensions-apiserver/pkg/apiserver"
-	utilnet "k8s.io/apimachinery/pkg/util/net"
 	"k8s.io/apimachinery/pkg/util/sets"
 	"k8s.io/apiserver/pkg/admission"
 	"k8s.io/apiserver/pkg/endpoints/discovery/aggregated"
@@ -37,7 +39,6 @@ import (
 	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	utilflowcontrol "k8s.io/apiserver/pkg/util/flowcontrol"
 	"k8s.io/apiserver/pkg/util/openapi"
-	"k8s.io/apiserver/pkg/util/webhook"
 	"k8s.io/client-go/dynamic"
 	clientgoinformers "k8s.io/client-go/informers"
 	clientgoclientset "k8s.io/client-go/kubernetes"
@@ -75,7 +76,7 @@ func createKubeAPIServerConfig(options options.ServerRunOptions) (
 	[]admission.PluginInitializer,
 	error,
 ) {
-	proxyTransport := CreateProxyTransport()
+	proxyTransport := controlplaneapiserver.CreateProxyTransport()
 
 	genericConfig, versionedInformers, serviceResolver, pluginInitializers, storageFactory, err := buildGenericConfig(&options, proxyTransport)
 	if err != nil {
@@ -312,7 +313,8 @@ func buildGenericConfig(
 		ExternalInformers:    versionedInformers,
 		LoopbackClientConfig: genericConfig.LoopbackClientConfig,
 	}
-	serviceResolver = buildServiceResolver(options.EnableAggregatorRouting, genericConfig.LoopbackClientConfig.Host, versionedInformers)
+	// Use ClusterIP service resolver for admission webhooks (simpler than endpoint routing)
+	serviceResolver = aggregatorapiserver.NewClusterIPServiceResolver(versionedInformers.Core().V1().Services().Lister())
 	genericInitializers, err := genericAdmissionConfig.New(proxyTransport, genericConfig.EgressSelector, serviceResolver, genericConfig.TracerProvider)
 	if err != nil {
 		lastErr = fmt.Errorf("failed to create admission plugin initializer: %w", err)
@@ -336,9 +338,9 @@ func buildGenericConfig(
 		return
 	}
 
-	if utilfeature.DefaultFeatureGate.Enabled(genericfeatures.AggregatedDiscoveryEndpoint) {
-		genericConfig.AggregatedDiscoveryGroupManager = aggregated.NewResourceManager("apis")
-	}
+	// AggregatedDiscovery graduated to GA in Kubernetes 1.34 and is always enabled
+	genericConfig.AggregatedDiscoveryGroupManager = aggregated.NewResourceManager("apis")
+
 	return
 }
 
@@ -354,46 +356,50 @@ func BuildPriorityAndFairness(serverRunOptions *genericoptions.ServerRunOptions,
 	), nil
 }
 
-func buildServiceResolver(enabledAggregatorRouting bool, hostname string, informer clientgoinformers.SharedInformerFactory) webhook.ServiceResolver {
-	var serviceResolver webhook.ServiceResolver
-	if enabledAggregatorRouting {
-		serviceResolver = aggregatorapiserver.NewEndpointServiceResolver(
-			informer.Core().V1().Services().Lister(),
-			informer.Core().V1().Endpoints().Lister(),
-		)
-	} else {
-		serviceResolver = aggregatorapiserver.NewClusterIPServiceResolver(
-			informer.Core().V1().Services().Lister(),
-		)
-	}
-	// resolve kubernetes.default.svc locally
-	if localHost, err := url.Parse(hostname); err == nil {
-		serviceResolver = aggregatorapiserver.NewLoopbackServiceResolver(serviceResolver, localHost)
-	}
-	return serviceResolver
-}
 
-// CreateProxyTransport creates the dialer infrastructure to connect to the nodes.
-func CreateProxyTransport() *http.Transport {
-	var proxyDialerFn utilnet.DialFunc
-	// Proxying to pods and services is IP-based... don't expect to be able to verify the hostname
-	proxyTLSClientConfig := &tls.Config{InsecureSkipVerify: true}
-	proxyTransport := utilnet.SetTransportDefaults(&http.Transport{
-		DialContext:     proxyDialerFn,
-		TLSClientConfig: proxyTLSClientConfig,
-	})
-	return proxyTransport
-}
 
 func getAPIResourceConfig() *serverstorage.ResourceConfig {
-	resourceConfig := controlplane.DefaultAPIResourceConfigSource()
-	resourceConfig.DisableVersions(appsv1.SchemeGroupVersion,
-		autoscalingapiv1.SchemeGroupVersion,
-		autoscalingapiv2.SchemeGroupVersion,
-		batchapiv1.SchemeGroupVersion,
-		networkingapiv1.SchemeGroupVersion,
-		nodev1.SchemeGroupVersion,
-		policyapiv1.SchemeGroupVersion,
-		schedulingapiv1.SchemeGroupVersion)
+	// Start with a new resource config and explicitly enable only what we need
+	// This is cleaner than starting with defaults and disabling what we don't want
+	resourceConfig := serverstorage.NewResourceConfig()
+
+	// Enable core v1 APIs (pods, services, namespaces, configmaps, secrets, etc.)
+	resourceConfig.EnableVersions(apiv1.SchemeGroupVersion)
+
+	// Enable RBAC APIs
+	resourceConfig.EnableVersions(rbacv1.SchemeGroupVersion)
+
+	// Enable authentication and authorization APIs
+	resourceConfig.EnableVersions(authenticationv1.SchemeGroupVersion)
+	resourceConfig.EnableVersions(authorizationapiv1.SchemeGroupVersion)
+
+	// Enable admission registration (for webhooks)
+	resourceConfig.EnableVersions(admissionregistrationv1.SchemeGroupVersion)
+
+	// Enable coordination (for leader election)
+	resourceConfig.EnableVersions(coordinationapiv1.SchemeGroupVersion)
+
+	// Enable certificates API
+	resourceConfig.EnableVersions(certificatesapiv1.SchemeGroupVersion)
+
+	// Enable events API
+	resourceConfig.EnableVersions(eventsv1.SchemeGroupVersion)
+
+	// Enable discovery API
+	resourceConfig.EnableVersions(discoveryv1.SchemeGroupVersion)
+
+	// Enable flowcontrol (for API priority and fairness)
+	resourceConfig.EnableVersions(flowcontrolv1.SchemeGroupVersion)
+
+	// Enable storage API (for CSI, storage classes)
+	resourceConfig.EnableVersions(storageapiv1.SchemeGroupVersion)
+
+	// Enable resource API (for dynamic resource allocation)
+	resourceConfig.EnableVersions(resourcev1.SchemeGroupVersion)
+
+	// Enable networking APIs including ipaddresses and servicecidrs
+	// These are required by the service IP repair controller when MultiCIDRServiceAllocator is enabled
+	resourceConfig.EnableVersions(networkingapiv1.SchemeGroupVersion)
+
 	return resourceConfig
 }

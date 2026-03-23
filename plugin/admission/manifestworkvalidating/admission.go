@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -63,8 +64,12 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 		VersionedKind:      a.GetKind(),
 	}
 
-	gvr := workv1.GroupVersion.WithResource("manifestworks")
-	gvk := workv1.GroupVersion.WithKind("ManifestWork")
+	gvr := workv1.Resource("manifestworks").WithVersion("v1")
+	gvk := schema.GroupVersionKind{
+		Group:   gvr.Group,
+		Version: gvr.Version,
+		Kind:    "ManifestWork",
+	}
 
 	// resource is not work
 	if a.GetKind() != gvk {

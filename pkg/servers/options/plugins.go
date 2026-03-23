@@ -1,12 +1,13 @@
 // Copyright Contributors to the Open Cluster Management project
 package options
 
-// refer to https://github.com/kubernetes/kubernetes/blob/v1.26.1/pkg/kubeapiserver/options/plugins.go
+// refer to https://github.com/kubernetes/kubernetes/blob/v1.34.3/pkg/kubeapiserver/options/plugins.go
 
 // This file exists to force the desired plugin implementations to be linked.
 // This should probably be part of some configuration fed into the build for a
 // given binary target.
 import (
+	mutatingadmissionpolicy "k8s.io/apiserver/pkg/admission/plugin/policy/mutating"
 	validatingadmissionpolicy "k8s.io/apiserver/pkg/admission/plugin/policy/validating"
 	certapproval "k8s.io/kubernetes/plugin/pkg/admission/certificates/approval"
 	certsigning "k8s.io/kubernetes/plugin/pkg/admission/certificates/signing"
@@ -50,9 +51,10 @@ var AllOrderedPlugins = []string{
 	// new admission plugins should generally be inserted above here
 	// webhook, resourcequota, and deny plugins must go at the end
 
+	mutatingadmissionpolicy.PluginName,   // MutatingAdmissionPolicy
 	mutatingwebhook.PluginName,           // MutatingAdmissionWebhook
-	validatingwebhook.PluginName,         // ValidatingAdmissionWebhook
 	validatingadmissionpolicy.PluginName, // ValidatingAdmissionPolicy
+	validatingwebhook.PluginName,         // ValidatingAdmissionWebhook
 	resourcequota.PluginName,             // ResourceQuota
 }
 
@@ -78,7 +80,7 @@ func RegisterAllAdmissionPlugins(plugins *admission.Plugins) {
 
 // DefaultOffAdmissionPlugins get admission plugins off by default for kube-apiserver.
 func DefaultOffAdmissionPlugins() sets.Set[string] {
-	defaultOnPlugins := sets.New[string](
+	defaultOnPlugins := sets.New(
 		lifecycle.PluginName,              // NamespaceLifecycle
 		serviceaccount.PluginName,         // ServiceAccount
 		mutatingwebhook.PluginName,        // MutatingAdmissionWebhook

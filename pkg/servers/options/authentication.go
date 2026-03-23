@@ -21,6 +21,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"k8s.io/apiserver/pkg/authentication/cel"
+	"k8s.io/apiserver/pkg/cel/environment"
 	"net/url"
 	"os"
 	"strings"
@@ -497,7 +499,8 @@ func (o *BuiltInAuthenticationOptions) ToAuthenticationConfig() (kubeauthenticat
 	}
 
 	if ret.AuthenticationConfig != nil {
-		if err := apiservervalidation.ValidateAuthenticationConfiguration(ret.AuthenticationConfig, []string{}).ToAggregate(); err != nil {
+		celComplier := cel.NewCompiler(environment.MustBaseEnvSet(environment.DefaultCompatibilityVersion(), false))
+		if err := apiservervalidation.ValidateAuthenticationConfiguration(celComplier, ret.AuthenticationConfig, []string{}).ToAggregate(); err != nil {
 			return kubeauthenticator.Config{}, err
 		}
 	}

@@ -53,7 +53,7 @@ type CertificateSigner struct {
 	signerName         string
 	signerConfig       *crypto.CA
 	signerDir          string
-	signerValidityDays int
+	signerValidityDays time.Duration
 
 	subCAs             map[string]*CertificateSigner
 	signedCertificates map[string]*signedCertificateInfo
@@ -312,11 +312,12 @@ func (s *CertificateSigner) SignSubCA(subSignerInfo CertificateSignerBuilder) er
 func (s *CertificateSigner) SignClientCertificate(signInfo *ClientCertificateSigningRequestInfo) error {
 	certDir := filepath.Join(s.signerDir, signInfo.Name)
 
+	days := time.Duration(signInfo.ValidityDays) * 24 * time.Hour
 	tlsConfig, _, err := s.signerConfig.EnsureClientCertificate(
 		ClientCertPath(certDir),
 		ClientKeyPath(certDir),
 		signInfo.UserInfo,
-		signInfo.ValidityDays,
+		days,
 	)
 
 	if err != nil {
@@ -333,11 +334,12 @@ func (s *CertificateSigner) SignClientCertificate(signInfo *ClientCertificateSig
 func (s *CertificateSigner) SignServingCertificate(signInfo *ServingCertificateSigningRequestInfo) error {
 	certDir := filepath.Join(s.signerDir, signInfo.Name)
 
+	days := time.Duration(signInfo.ValidityDays) * 24 * time.Hour
 	tlsConfig, _, err := s.signerConfig.EnsureServerCert(
 		ServingCertPath(certDir),
 		ServingKeyPath(certDir),
 		sets.New[string](signInfo.Hostnames...),
-		signInfo.ValidityDays,
+		days,
 	)
 
 	if err != nil {
@@ -447,7 +449,7 @@ func libraryGoEnsureSubCA(ca *crypto.CA, certFile, keyFile, serialFile, name str
 func libraryGoMakeAndWriteSubCA(ca *crypto.CA, certFile, keyFile, serialFile, name string, expireDays int) (*crypto.CA, error) {
 	klog.V(4).Infof("Generating sub-CA certificate in %s, key in %s, serial in %s", certFile, keyFile, serialFile)
 
-	subCAConfig, err := crypto.MakeCAConfigForDuration(name, time.Duration(expireDays)*time.Hour*24, ca)
+	subCAConfig, err := crypto.MakeCAConfigForDuration(name, time.Duration(expireDays)*24*time.Hour, ca)
 	if err != nil {
 		return nil, err
 	}

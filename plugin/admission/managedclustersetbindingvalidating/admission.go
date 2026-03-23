@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -63,8 +64,12 @@ func (p *Plugin) Validate(ctx context.Context, a admission.Attributes, o admissi
 		VersionedKind:      a.GetKind(),
 	}
 
-	gvr := clusterv1beta2api.GroupVersion.WithResource("managedclustersetbindings")
-	gvk := clusterv1beta2api.GroupVersion.WithKind("ManagedClusterSetBinding")
+	gvr := clusterv1beta2api.Resource("managedclustersetbindings").WithVersion("v1beta2")
+	gvk := schema.GroupVersionKind{
+		Group:   gvr.Group,
+		Version: gvr.Version,
+		Kind:    "ManagedClusterSetBinding",
+	}
 
 	// resource is not mcl
 	if a.GetKind() != gvk {

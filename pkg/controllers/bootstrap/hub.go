@@ -88,7 +88,7 @@ func BuildKubeSystemResources(ctx context.Context, config server.Config, kubeCli
 					{
 						APIGroups: []string{"cluster.open-cluster-management.io"},
 						Resources: []string{"managedclusters"},
-						Verbs:     []string{"get", "list", "update", "create"},
+						Verbs:     []string{"get", "list", "watch", "update", "create"},
 					},
 					{
 						APIGroups: []string{"cluster.open-cluster-management.io"},
@@ -180,7 +180,7 @@ func prepareClusterInfoConfigmap(config server.Config, kubeClient kubernetes.Int
 		return err
 	}
 
-	if err := apiclient.CreateOrUpdateConfigMap(kubeClient, &corev1.ConfigMap{
+	if err := apiclient.CreateOrUpdate(kubeClient.CoreV1().ConfigMaps(metav1.NamespacePublic), &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      tokenapi.ConfigMapClusterInfo,
 			Namespace: metav1.NamespacePublic,
@@ -188,7 +188,7 @@ func prepareClusterInfoConfigmap(config server.Config, kubeClient kubernetes.Int
 		Data: map[string]string{
 			tokenapi.KubeConfigKey: string(kubeconfigRaw),
 		},
-	}); err != nil && !errors.IsAlreadyExists(err) {
+	}); err != nil {
 		return err
 	}
 
